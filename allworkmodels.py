@@ -22,7 +22,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import  confusion_matrix
 from sklearn.calibration import calibration_curve, CalibratedClassifierCV
-from imblearn.over_sampling import SMOTE
+from imblearn.over_sampling import SMOTE, ADASYN
 import xgboost as xgb
 import optuna
 import shap
@@ -83,6 +83,10 @@ print(f'Ratio classe majoritaire / minoritaire: {ratio:.2f}')
 smote = SMOTE(random_state=42)
 X_train_smote, y_train_smote = smote.fit_resample(X_train, y_train)
 print(f'SMOTE - Train size: {X_train_smote.shape}, Distribution:\n{y_train_smote.value_counts()}')
+
+adasyn = ADASYN(random_state=42)
+X_train_adasyn, y_train_adasyn = adasyn.fit_resample(X_train, y_train)
+print(f'ADASYN - Train size: {X_train_adasyn.shape}, Distribution:\n{y_train_adasyn.value_counts()}')
 # %% [markdown]
 # ### Comparaison des approches de traitement du déséquilibre
 # Deux stratégies sont comparées :
@@ -108,21 +112,49 @@ lr_smote = LogisticRegression(penalty='l2', solver='lbfgs', max_iter=1000, rando
 lr_smote.fit(X_train_smote, y_train_smote)
 y_pred_smote = lr_smote.predict(X_test)
 
+# Modèle avec ADASYN (données)
+lr_adasyn = LogisticRegression(penalty='l2', solver='lbfgs', max_iter=1000, random_state=42)
+lr_adasyn.fit(X_train_adasyn, y_train_adasyn)
+y_pred_adasyn = lr_adasyn.predict(X_test)
+
 comparison = pd.DataFrame({
-    'Approche': ['Aucun', 'class_weight (algorithmique)', 'SMOTE (données)'],
+    'Approche': ['Aucun', 'class_weight (algorithmique)', 'SMOTE (données)', 'ADASYN (données)'],
     'F1-Macro': [
         f1_score(y_test, y_pred_base, average='macro'),
         f1_score(y_test, y_pred_bal, average='macro'),
-        f1_score(y_test, y_pred_smote, average='macro')
+        f1_score(y_test, y_pred_smote, average='macro'),
+        f1_score(y_test, y_pred_adasyn, average='macro')
     ],
     'MCC': [
         matthews_corrcoef(y_test, y_pred_base),
         matthews_corrcoef(y_test, y_pred_bal),
-        matthews_corrcoef(y_test, y_pred_smote)
+        matthews_corrcoef(y_test, y_pred_smote),
+        matthews_corrcoef(y_test, y_pred_adasyn)
     ]
 })
 print('Comparaison des stratégies de traitement du déséquilibre :')
 comparison.round(4)
+
+# Visualisation des résultats avec seaborn et matplotlib
+plt.figure(figsize=(12, 5))
+sns.barplot(
+    data=comparison.melt(
+        id_vars='Approche',
+        value_vars=['F1-Macro', 'MCC'],
+        var_name='Métrique',
+        value_name='Score'
+    ),
+    x='Approche',
+    y='Score',
+    hue='Métrique',
+    palette='Set2'
+)
+plt.title('Comparaison des approches de déséquilibre')
+plt.xlabel('Approche')
+plt.ylabel('Score')
+plt.xticks(rotation=20, ha='right')
+plt.tight_layout()
+plt.show()
 # %% [markdown]
 # ---
 # ## Étape 2 : Développement des Modèles
